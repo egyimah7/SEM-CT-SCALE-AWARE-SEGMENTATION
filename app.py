@@ -33,7 +33,8 @@ st.caption(
 # Sidebar controls
 # -----------------------------
 st.sidebar.header("Model")
-model_path = st.sidebar.text_input("Model path", LOCAL_MODEL_PATH)
+model_path = st.sidebar.text_input("Model path", "models/best_model.keras")
+
 
 st.sidebar.header("Resolution")
 res_um_px = st.sidebar.number_input("Image resolution (µm/px)", min_value=1e-6, value=0.084, format="%.6f")
@@ -206,6 +207,7 @@ st.download_button(
     file_name="sem_ct_scale_aware_report.zip",
     mime="application/zip",
 )
+
 
 
 
