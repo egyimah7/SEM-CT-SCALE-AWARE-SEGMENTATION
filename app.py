@@ -10,6 +10,17 @@ from PIL import Image
 from analysis import mask_to_png_black_crack, prob_to_png
 from predict import load_model_any, predict_single
 
+import os
+import urllib.request
+
+FILE_ID = "1vMtdPhel-Bq1YhwArYqdPHoFJLEPmiqx"
+MODEL_URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
+LOCAL_MODEL_PATH = "models/best_model.keras"
+
+os.makedirs("models", exist_ok=True)
+if not os.path.exists(LOCAL_MODEL_PATH):
+    urllib.request.urlretrieve(MODEL_URL, LOCAL_MODEL_PATH)
+
 
 st.set_page_config(page_title="SEM/CT Scale Aware Segmentation", layout="wide")
 st.title("SEM/CT Scale Aware Segmentation")
@@ -22,7 +33,7 @@ st.caption(
 # Sidebar controls
 # -----------------------------
 st.sidebar.header("Model")
-model_path = st.sidebar.text_input("Model path", "models/best_model_savedmodel")
+model_path = st.sidebar.text_input("Model path", LOCAL_MODEL_PATH)
 
 st.sidebar.header("Resolution")
 res_um_px = st.sidebar.number_input("Image resolution (µm/px)", min_value=1e-6, value=0.084, format="%.6f")
@@ -195,5 +206,6 @@ st.download_button(
     file_name="sem_ct_scale_aware_report.zip",
     mime="application/zip",
 )
+
 
 
