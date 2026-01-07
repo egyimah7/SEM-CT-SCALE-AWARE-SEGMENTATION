@@ -10,18 +10,6 @@ from PIL import Image
 from analysis import mask_to_png_black_crack, prob_to_png
 from predict import load_model_any, predict_single
 
-import os
-import urllib.request
-
-FILE_ID = "1vMtdPhel-Bq1YhwArYqdPHoFJLEPmiqx"
-MODEL_URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
-LOCAL_MODEL_PATH = "models/best_model.keras"
-
-os.makedirs("models", exist_ok=True)
-if not os.path.exists(LOCAL_MODEL_PATH):
-    urllib.request.urlretrieve(MODEL_URL, LOCAL_MODEL_PATH)
-
-
 st.set_page_config(page_title="SEM/CT Scale Aware Segmentation", layout="wide")
 st.title("SEM/CT Scale Aware Segmentation")
 st.caption(
@@ -34,7 +22,8 @@ st.caption(
 # -----------------------------
 st.sidebar.header("Model")
 model_path = st.sidebar.text_input("Model path", "models/best_model.keras")
-
+# If you prefer SavedModel folder:
+# model_path = st.sidebar.text_input("Model path", "models/best_model_savedmodel")
 
 st.sidebar.header("Resolution")
 res_um_px = st.sidebar.number_input("Image resolution (µm/px)", min_value=1e-6, value=0.084, format="%.6f")
@@ -49,7 +38,7 @@ min_obj_px = st.sidebar.number_input("Remove tiny objects (< px)", min_value=0, 
 close_radius = st.sidebar.number_input("Closing radius (px)", min_value=0, value=1, step=1)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Tip: If your prediction misses thin cracks, try lowering t_low/t_high slightly and reducing min_obj_px.")
+st.sidebar.caption("If thin cracks are missing, lower t_low/t_high slightly and/or reduce min_obj_px.")
 
 # -----------------------------
 # Upload inputs
@@ -60,9 +49,6 @@ with colA:
 with colB:
     up_gt = st.file_uploader("Optional: Upload GT mask (black=crack/pore)", type=["png", "jpg", "jpeg", "tif", "tiff"])
 
-# -----------------------------
-# Load model once (cached)
-# -----------------------------
 @st.cache_resource(show_spinner=False)
 def _load_cached_model(path: str):
     return load_model_any(path)
@@ -96,41 +82,23 @@ with st.spinner("Running prediction..."):
         gt_mask_bytes=gt_bytes,
     )
 
-img01 = out["img01"]           # float [0,1] HxW
-prob = out["prob"]             # float [0,1] HxW
-pred01 = out["pred"]           # uint8 0/1 HxW  (1 = crack/pore)
-metrics = out["metrics"]       # dict or None
-morph = out["morph_summary"]   # dict (unit-aware)
-df_obj = out["df_objects"]     # DataFrame (unit-aware columns)
+img01 = out["img01"]                 # float [0,1] HxW
+prob = out["prob"]                   # float [0,1] HxW
+pred01 = out["pred"]                 # uint8 0/1 HxW (1=crack/pore)
+metrics = out["metrics"]             # dict or None
+morph = out["morph_summary"]         # dict (should include units in keys if your analysis.py does that)
+df_obj = out["df_objects"]           # DataFrame
 
 # -----------------------------
-# Prepare visuals
+# Visuals
 # -----------------------------
-raw = np.asarray(img01)
-
-# squeeze (H,W,1) -> (H,W)
-if raw.ndim == 3 and raw.shape[-1] == 1:
-    raw = raw[..., 0]
-
-# convert to uint8 for display
-if raw.dtype != np.uint8:
-    rmax = float(raw.max())
-    if rmax <= 1.5:  # likely [0,1]
-        raw_u8 = (np.clip(raw, 0, 1) * 255).astype(np.uint8)
-    else:            # likely [0,255] float
-        raw_u8 = np.clip(raw, 0, 255).astype(np.uint8)
-else:
-    raw_u8 = raw
-
+raw_u8 = (np.clip(img01, 0, 1) * 255).astype(np.uint8)
 prob_u8 = prob_to_png(prob)
-pred_u8 = mask_to_png_black_crack(pred01)  # crack/pore black; matrix white
+pred_u8 = mask_to_png_black_crack(pred01)
 
 overlay_rgb = np.stack([raw_u8, raw_u8, raw_u8], axis=-1).astype(np.uint8)
 overlay_rgb[pred01 > 0] = [255, 200, 0]
 
-# -----------------------------
-# Display images
-# -----------------------------
 c1, c2, c3 = st.columns(3)
 with c1:
     st.subheader("Input")
@@ -152,21 +120,19 @@ st.subheader("Quantitative outputs")
 mcol1, mcol2 = st.columns(2)
 
 with mcol1:
-    st.markdown("### Morphology (from prediction)")
-    st.caption("All lengths in µm, areas in µm² (see *_um and *_um2 fields).")
+    st.subheader("Morphology summary (physical units)")
+    st.caption("All lengths in µm, areas in µm² (see key names).")
     st.json(morph)
 
 with mcol2:
-    st.markdown("### Validation metrics")
+    st.subheader("Validation metrics")
     if metrics is None:
         st.info("No GT mask uploaded → metrics not computed.")
-        st.caption("For publishable metrics (IoU/F1/etc.), upload a GT mask for the same slice.")
     else:
         st.json(metrics)
 
 if df_obj is not None and len(df_obj) > 0:
-    st.markdown("### Object table (prediction)")
-    st.caption("Unit-aware columns included: area_um2, perimeter_um, major_axis_length_um, minor_axis_length_um, eq_diam_um, aperture_um_proxy.")
+    st.subheader("Object table (prediction)")
     st.dataframe(df_obj, use_container_width=True)
 else:
     st.caption("No objects detected (or removed by settings).")
@@ -205,8 +171,10 @@ st.download_button(
     label="Download report bundle (ZIP)",
     data=zip_buf,
     file_name="sem_ct_scale_aware_report.zip",
-    mime="application/zip",
+    mime="application/zip"
 )
+
+
 
 
 
